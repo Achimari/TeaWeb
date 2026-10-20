@@ -1,0 +1,12 @@
+# Exclude local working context from direct Vercel CLI uploads.
+.agents/
+.claude/
+.codex/
+.impeccable/
+.playwright-mcp/
+AGENTS.md
+CLAUDE.md
+MainAnimation video.mp4
+.env*
+!.env.example
+next-env.d.ts

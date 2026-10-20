@@ -1,0 +1,171 @@
+@import 'tailwindcss';
+
+/* A gallery floor and one cobalt teapot. The object carries the colour; the interface stays small and at the edges. */
+:root {
+  color-scheme: light;
+  --canvas: #f3f0ea;
+  --ink: #16181f;
+  --muted: #5d5c63;
+  --line: #e2ddd3;
+  --paper: #fffdf9;
+  --cobalt: #2140a0;
+  --cobalt-deep: #172f78;
+  --cobalt-wash: #e8ecf8;
+  --field-edge: #8b8578;
+  --error: #9a2a1d;
+  --display: var(--font-display), 'Iowan Old Style', Georgia, serif;
+  --sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --label: var(--font-label), 'Arial Narrow', sans-serif;
+  --tap: 2.75rem;
+  --edge: clamp(1rem, 2.4vw, 2rem);
+}
+
+body { margin: 0; background: var(--canvas); color: var(--ink); font: 400 1rem/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* One screen. min-height (not height) lets large text grow the page and scroll instead of clipping. */
+.tea {
+  position: relative; isolation: isolate; min-height: 100dvh;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: auto minmax(16rem, 1fr) auto; /* the object keeps a real share; cramped screens scroll */
+  grid-template-areas: 'top-left top-right' '. .' 'bottom bottom';
+  padding: max(var(--edge), env(safe-area-inset-top)) max(var(--edge), env(safe-area-inset-right)) max(var(--edge), env(safe-area-inset-bottom)) max(var(--edge), env(safe-area-inset-left));
+}
+
+/* The object, full bleed behind everything. */
+.stage { position: absolute; inset: 0; z-index: 0; }
+.turntable { position: absolute; inset: 0; }
+.turntable:focus-visible { outline-offset: -0.75rem; border-radius: 0.75rem; }
+.scene { display: block; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; }
+.scene { cursor: grab; }
+.scene:active { cursor: grabbing; }
+.scene[data-hover='true'] { cursor: pointer; }
+
+/* Captions: a pin on the part, a hairline, and a small caption on the bare floor beside it. The caption is the
+   button (44px tall); it is placed clear of the pot and cup, so it needs no backing and the sculpture stays whole. */
+.hotspots { list-style: none; margin: 0; padding: 0; }
+.hotspots[data-floating='true'] li { position: absolute; left: 0; top: 0; }
+.hotspots[data-floating='true'] .hotspot, .hotspot-pin { position: absolute; left: 0; top: 0; will-change: transform; }
+.hotspots[data-floating='false'] { position: absolute; z-index: 2; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem; width: min(30rem, calc(100% - 2rem)); }
+.hotspots[data-floating='false'] .hotspot-pin { display: none; }
+.hotspot {
+  display: inline-flex; align-items: center; gap: 0.5rem; min-height: var(--tap); padding: 0 0.625rem; border: 0; white-space: nowrap; background: none; border-radius: 0.625rem;
+  font-family: var(--label); font-size: 0.875rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cobalt);
+  text-decoration: underline; text-decoration-color: transparent; text-decoration-thickness: 1px; text-underline-offset: 0.3em;
+  transition: opacity 160ms ease-out, text-decoration-color 160ms ease-out, color 160ms ease-out;
+}
+.hotspot[data-active='true'], .hotspot:hover, .hotspot:focus-visible { color: var(--cobalt-deep); text-decoration-color: currentColor; }
+.hotspot[data-hidden='true'], .hotspot-pin[data-hidden='true'] { opacity: 0.4; }
+.hotspot[data-compact='true'] { flex-direction: column; justify-content: center; gap: 0.15rem; padding: 0.25rem 0.5rem; line-height: 1.1; } /* tight spots: the badge sits under the name */
+.hotspot-badge { padding: 0.1rem 0.45rem; border-radius: 999px; background: var(--cobalt); color: var(--paper); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.hotspot-pin { width: 0; height: 0; pointer-events: none; transition: opacity 160ms ease-out; }
+.hotspot-pin::before { /* the hairline, drawn from the part toward its caption */
+  content: ''; position: absolute; left: 0; top: -0.5px; width: var(--leader, 0px); height: 1px; background: rgb(33 64 160 / 0.5);
+  transform-origin: 0 50%; transform: rotate(var(--angle, 0rad));
+}
+.hotspot-pin::after {
+  content: ''; position: absolute; left: -4.5px; top: -4.5px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--paper); box-shadow: inset 0 0 0 2.5px var(--cobalt); transition: transform 160ms ease-out;
+}
+.hotspot-pin[data-active='true']::after { background: var(--cobalt); transform: scale(1.3); }
+.stage-note { position: absolute; z-index: 2; left: 50%; top: calc(50% + 3rem); transform: translateX(-50%); width: min(26rem, calc(100% - 2rem)); margin: 0; text-align: center; color: var(--muted); font-size: 0.875rem; }
+
+/* Corners: small type at the edges. Only their own content takes pointer input. */
+.corner { position: relative; z-index: 1; margin: 0; pointer-events: none; }
+.corner-top-left { grid-area: top-left; }
+.corner-bottom { grid-area: bottom; align-self: end; justify-self: start; display: flex; flex-direction: column; align-items: flex-start; gap: 0.4rem; } /* the lower right belongs to the object */
+.corner-bottom p { margin: 0; }
+.mark { width: fit-content; margin: 0; font-family: var(--display); font-size: 1.25rem; letter-spacing: -0.01em; }
+.hint { font-family: var(--label); font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.hint { max-width: 22rem; }
+.statement { font-family: var(--display); font-size: clamp(1.25rem, 0.9rem + 1vw, 1.75rem); line-height: 1.1; max-width: 18ch; }
+
+/* The panel: one quiet card at a time, opened from a part of the object. */
+.panel {
+  position: absolute; z-index: 3; top: calc(max(var(--edge), env(safe-area-inset-top)) + 2.5rem); right: max(var(--edge), env(safe-area-inset-right));
+  width: min(24rem, calc(100vw - 2rem)); height: min(32rem, calc(100dvh - 6rem)); display: flex; flex-direction: column; gap: 0.75rem;
+  padding: 1.25rem 1.25rem 1.25rem; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: 1rem;
+  box-shadow: 0 30px 60px -24px rgb(22 24 31 / 0.35); transform-origin: top right; animation: panel-in 180ms ease-out;
+  overflow-y: auto; overscroll-behavior: contain; /* one fixed size for every panel, so loading or switching never shrinks it; scrolls only when it must */
+}
+.panel:focus { outline: none; }
+.panel-body { display: flex; flex-direction: column; gap: 0.75rem; }
+.panel-line { flex: 1 1 auto; }
+@keyframes panel-in { from { opacity: 0; transform: scale(0.97) translateY(-4px); } }
+.close { position: absolute; top: 0.5rem; right: 0.5rem; width: var(--tap); height: var(--tap); display: grid; place-items: center; border: 0; background: none; border-radius: 50%; color: var(--muted); }
+.close:hover { background: #f1ece2; }
+.panel-title { margin: 0; padding-right: 2.5rem; font: 400 1.5rem/1.15 var(--display); text-wrap: balance; }
+.panel-lede { margin: 0; color: var(--muted); font-size: 0.9375rem; }
+.clock { margin: 0; font: 400 clamp(3rem, 2rem + 4vw, 4.5rem)/1 var(--display); font-variant-numeric: tabular-nums; letter-spacing: -0.02em; color: var(--cobalt); }
+.loading { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); margin: 0; }
+.note { margin: 0; font-size: 0.8125rem; line-height: 1.4; color: var(--muted); }
+.empty { margin: 0; padding: 0.75rem 0; color: var(--muted); }
+
+.presets { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.preset { min-height: 3.25rem; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; padding: 0.4rem 0.85rem; border: 1px solid var(--line); border-radius: 0.75rem; background: var(--paper); text-align: left; font-weight: 600; transition: background-color 120ms ease-out, transform 100ms ease-out; }
+.preset:hover { background: var(--cobalt-wash); border-color: #c7d0ee; }
+.preset:active { transform: scale(0.98); }
+.preset-time { font-weight: 400; font-size: 0.8125rem; color: var(--muted); }
+.custom { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: end; }
+
+.button {
+  min-height: var(--tap); display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+  padding: 0 1.125rem; border-radius: 999px; border: 1px solid transparent; font-weight: 600; font-size: 0.9375rem; white-space: nowrap;
+  transition: background-color 120ms ease-out, transform 100ms ease-out;
+}
+.button:active:not(:disabled) { transform: scale(0.97); }
+.primary { background: var(--cobalt); color: var(--paper); }
+.primary:hover:not(:disabled) { background: var(--cobalt-deep); }
+.quiet { background: transparent; border-color: #d3cdc1; }
+.quiet:hover:not(:disabled) { background: #f1ece2; }
+.button:disabled { opacity: 0.6; }
+.icon-button { width: var(--tap); height: var(--tap); display: inline-grid; place-items: center; border: 0; border-radius: 50%; background: transparent; }
+.icon-button:hover:not(:disabled) { background: #f1ece2; }
+.icon-button:disabled { opacity: 0.35; }
+.link { align-self: flex-start; border: 0; background: none; padding: 0.6rem 0; min-height: var(--tap); text-decoration: underline; font-weight: 600; font-size: 0.875rem; color: var(--cobalt); }
+.actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.join { display: flex; flex-direction: column; gap: 0.75rem; }
+.field { display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.field label, .field > span { font-size: 0.875rem; font-weight: 600; }
+.field input { height: var(--tap); width: 100%; padding: 0 0.875rem; border: 1px solid var(--field-edge); border-radius: 0.625rem; background: #fffefb; color: var(--ink); }
+.field input:focus-visible { outline-offset: 0; border-color: var(--cobalt); }
+.field input[aria-invalid='true'] { border-color: var(--error); }
+.field-error, .form-error { font-size: 0.8125rem; color: var(--error); line-height: 1.35; }
+.form-error { margin: 0; }
+
+.roster { flex: 1 1 0; min-height: 5rem; border-top: 1px solid var(--line); }
+.roster ol, .first-five { list-style: none; margin: 0; padding: 0; }
+.roster li, .first-five li { height: 2.5rem; display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) auto; align-items: center; gap: 0.5rem; padding: 0 0.5rem; border-bottom: 1px solid var(--line); font-size: 0.9375rem; }
+.first-five { border-top: 1px solid var(--line); }
+.first-five li:first-child .place { color: var(--cobalt); }
+.roster li.mine { background: var(--cobalt-wash); font-weight: 600; }
+.place { font-variant-numeric: tabular-nums; color: var(--muted); font-family: var(--display); font-size: 1.0625rem; }
+.mine .place, .you { color: var(--cobalt); }
+.name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roster time, .first-five time { font-size: 0.8125rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.line-foot { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.pager { display: flex; gap: 0.25rem; }
+
+/* Phones: corner type tightens, the hint moves under the statement, and panels open as a bottom sheet. */
+@media (max-width: 699px) {
+  .tea { grid-template-columns: minmax(0, 1fr) auto; }
+  .hotspot { font-size: 0.8125rem; }
+  .tea:has(.panel) .hotspots { visibility: hidden; } /* the sheet is the task; its close button and Escape bring them back */
+  .panel { top: auto; bottom: max(0.75rem, env(safe-area-inset-bottom)); left: 0.75rem; right: 0.75rem; width: auto; height: min(25rem, 55dvh); transform-origin: bottom center; } /* one steady height, so the pot above it stays put */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel { animation: none; }
+  .spin { animation-duration: 2.4s; }
+  .button, .preset, .hotspot, .hotspot-pin, .hotspot-pin::after { transition: none; }
+  .button:active:not(:disabled), .preset:active { transform: none; }
+}
+@media (prefers-contrast: more) {
+  :root { --muted: #3d3c42; --line: #8c8478; }
+}

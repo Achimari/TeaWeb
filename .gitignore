@@ -1,0 +1,29 @@
+# Dependencies and build output
+/node_modules/
+/.next/
+/out/
+/.vercel/
+/.turbo/
+/coverage/
+*.tsbuildinfo
+/next-env.d.ts
+
+# Secrets: keep the documented example only
+.env*
+!.env.example
+
+# Local AI tools, skills, and browser artifacts
+/.agents/
+/.claude/
+/.codex/
+/.impeccable/
+/.playwright-mcp/
+/AGENTS.md
+/CLAUDE.md
+
+# Local reference media, logs, and editor files
+/MainAnimation video.mp4
+*.log
+.DS_Store
+/.vscode/
+/.idea/
