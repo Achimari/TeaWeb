@@ -1,0 +1,63 @@
+// The Tea Party: one shared daily line, the previous days' first five, one shared tea timer, and the
+// request counters that rate-limit writes across every server process.
+// Prisma ORM 7 (prisma-client generator). After editing: `npx prisma migrate dev --name <change>`.
+// Constraints Prisma cannot express (CHECKs, the timer's single row) are added in the migration SQL.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// One place per guest per business day. guestKey is the SHA-256 of the guest's cookie token, never the token.
+model QueueEntry {
+  id           BigInt   @id @default(autoincrement())
+  guestKey     String   @map("guest_key") @db.Char(64)
+  displayName  String   @map("display_name") @db.VarChar(24)
+  businessDate DateTime @map("business_date") @db.Date
+  joinedAt     DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
+
+  @@unique([guestKey, businessDate])
+  @@index([businessDate, joinedAt, id])
+  @@map("queue_entries")
+}
+
+/// The first five of each finished business day, in order. The key makes a retried archive a no-op.
+model DailyArchive {
+  businessDate DateTime @map("business_date") @db.Date
+  position     Int      @db.SmallInt
+  displayName  String   @map("display_name") @db.VarChar(24)
+  joinedAt     DateTime @map("joined_at") @db.Timestamptz(3)
+  archivedAt   DateTime @default(now()) @map("archived_at") @db.Timestamptz(3)
+
+  @@id([businessDate, position])
+  @@map("daily_archive")
+}
+
+/// The one tea timer for the whole site (a single row, id 1). Idle when deadline is null.
+/// version goes up on every start and stop, so a stop aimed at an older timer cannot end a newer one.
+model SharedTimer {
+  id         Int       @id @default(1)
+  version    Int       @default(0)
+  label      String?   @db.VarChar(24)
+  durationMs Int?      @map("duration_ms")
+  startedAt  DateTime? @map("started_at") @db.Timestamptz(3)
+  deadline   DateTime? @db.Timestamptz(3)
+  updatedAt  DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@map("shared_timer")
+}
+
+/// Fixed-window request counters, shared by every server process. Old windows are swept at rollover.
+model RateLimit {
+  key         String   @db.VarChar(120)
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  hits        Int      @default(1)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+  @@map("rate_limits")
+}

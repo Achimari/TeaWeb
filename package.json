@@ -6,34 +6,48 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "postinstall": "prisma generate",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.ts"
+    "test": "node --env-file-if-exists=.env --experimental-strip-types --test tests/*.test.ts",
+    "db:up": "docker run -d --name teaweb-pg -e POSTGRES_USER=tea -e POSTGRES_PASSWORD=tea -e POSTGRES_DB=tea -p 127.0.0.1:5433:5432 postgres:17-alpine",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:dev": "prisma migrate dev",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.0",
+    "@prisma/adapter-pg": "7.10.0",
+    "@prisma/client": "7.10.0",
     "lucide-react": "^0.468.0",
     "next": "^16.0.0",
+    "pg": "8.23.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "three": "^0.186.1",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.8",
     "@gltf-transform/core": "^4.5.1",
     "@gltf-transform/extensions": "^4.5.1",
     "@gltf-transform/functions": "^4.5.1",
+    "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "^4.1.0",
     "@types/node": "^22.0.0",
+    "@types/pg": "8.15.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.186.0",
+    "dotenv": "17.4.2",
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.0.0",
     "meshoptimizer": "^1.3.0",
+    "prisma": "7.10.0",
     "tailwindcss": "^4.1.0",
     "typescript": "^5.7.0"
   },
-  "type": "module"
+  "type": "module",
+  "overrides": {
+    "mysql2": "3.24.4",
+    "deepmerge-ts": "8.0.2"
+  }
 }

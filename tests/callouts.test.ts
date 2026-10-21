@@ -33,20 +33,15 @@ test('it keeps clear of other callouts, corner text and an open panel', () => {
   assert.ok(!overlaps(spot, panel) && !overlaps(spot, other));
 });
 
-test('it keeps its side while that side stays clear, so it does not jump as the pot turns', () => {
-  const first = placeCallout({ anchor: { x: 600, y: 400 }, size, bounds, solids: [], avoid: [] });
-  const flipped = first.side === 'left' ? 'right' : 'left';
-  for (let dx = 0; dx <= 30; dx += 5) {
-    const next = placeCallout({ anchor: { x: 600 + dx, y: 400 }, size, bounds, solids: [], avoid: [], previous: flipped });
-    assert.equal(next.side, flipped);
-  }
-});
-
-test('it leaves its side once that side is blocked', () => {
+test('placement depends only on the geometry: the same scene always gives the same spot', () => {
+  // No memory of earlier placements (an open panel's layout must not leak into the closed one): ties go the
+  // same way every time, right first, and a blocked side simply loses.
+  const free = placeCallout({ anchor: { x: 600, y: 400 }, size, bounds, solids: [], avoid: [] });
+  assert.equal(free.side, 'right');
+  assert.deepEqual(placeCallout({ anchor: { x: 600, y: 400 }, size, bounds, solids: [], avoid: [] }), free);
   const wall: Rect = { left: 610, top: 300, right: 800, bottom: 500 };
-  const next = placeCallout({ anchor: { x: 600, y: 400 }, size, bounds, solids: [wall], avoid: [], previous: 'right' });
-  assert.notEqual(next.side, 'right');
-  assert.ok(!overlaps(next, wall));
+  const blocked = placeCallout({ anchor: { x: 600, y: 400 }, size, bounds, solids: [wall], avoid: [] });
+  assert.notEqual(blocked.side, 'right'); assert.ok(!overlaps(blocked, wall));
 });
 
 test('it reports how good its spot is, so the clearer of two anchors can win', () => {

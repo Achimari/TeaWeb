@@ -2,8 +2,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
-import { fit, type Window } from './framing';
+import { fitTurntable, type CameraBasis, type Window } from './framing';
 import { LID_HINGE, lidPose, settle, stepLid, type LidState } from './lid';
+import { addTeapotArt } from './teapot-art';
 
 export type Part = 'spout' | 'body' | 'cup';
 export type Insets = { top: number; right: number; bottom: number; left: number };
@@ -18,7 +19,7 @@ export type TeapotScene = {
   setHighlight(part: Part | null): void;
   pick(clientX: number, clientY: number): Part | null;
   anchors(): { parts: Record<Part, Anchor>; pot: Box; cup: Box }; // the parts, and the outlines of the pot (body, lid and handle) and the cup
-  resize(insets: Insets): void;
+  resize(insets: Insets | Insets[]): void; // several candidate free areas: the one that frames the set largest wins
   dispose(): void;
 };
 
@@ -51,7 +52,8 @@ function studio(): THREE.Scene {
   return room;
 }
 
-export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: () => void): Promise<TeapotScene> {
+// onRender runs after every drawn frame; `settled` is true once the lid and the framing have stopped moving.
+export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: (settled: boolean) => void): Promise<TeapotScene> {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, powerPreference: 'high-performance' });
   const coarse = window.matchMedia('(pointer: coarse)').matches;
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, coarse ? 1.5 : 2));
@@ -85,6 +87,7 @@ export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: () 
     object.material = (object.material as THREE.MeshStandardMaterial).clone();
     if (!object.name.endsWith('Tea')) glow.get(partOf(object))!.push(object.material as THREE.MeshStandardMaterial); // lit tea reads as the wrong drink
   });
+  const disposeArt = addTeapotArt(teapot);
   scene.add(model);
   const visible = targets.filter((t) => !t.name.startsWith('Hit'));
 
@@ -104,10 +107,10 @@ export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: () 
   };
   poseLid(lid.matrix, 0, 0);
 
-  // ---- Framing: the closest camera that keeps the whole set inside the free area, for the current turn and lid.
-  // It is exact for every pose, so the resting view can be large and no turn can crop anything.
+  // ---- Framing: one camera position for every turn angle. It changes only when the lid, available area or cup moves.
   const view = new THREE.Vector3(0.12, 0.36, 1).normalize();
   const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), view).normalize(), up = new THREE.Vector3().crossVectors(view, right);
+  const cameraBasis: CameraBasis = { right: [right.x, right.y, right.z], up: [up.x, up.y, up.z], view: [view.x, view.y, view.z] };
   camera.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, view));
   // Vertices, sampled once: the pot's in its own frame, the lid's in the lid's frame, the cup's in the cup's.
   const sample = (root: THREE.Object3D, ...skip: THREE.Object3D[]) => {
@@ -122,7 +125,9 @@ export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: () 
   };
   model.updateMatrixWorld(true);
   const potPoints = sample(teapot, lid), lidPoints = sample(lid), cupPoints = sample(cup);
-  const basis = new Float32Array(potPoints.length + lidPoints.length + cupPoints.length);
+  const turningPoints = new Float32Array(potPoints.length + lidPoints.length);
+  turningPoints.set(potPoints);
+  const fixedPoints = new Float32Array(cupPoints.length);
   // Each caption keeps clear of its whole part: the spout, the lid (wherever it is), the cup.
   const spout = teapot.getObjectByName('Spout')!, spoutPoints = sample(spout), bodyPoints = sample(teapot, lid, spout, teapot.getObjectByName('SpoutLip')!);
   const outlines: Record<Part, [number[], () => THREE.Matrix4]> = { spout: [spoutPoints, () => spout.matrixWorld], body: [lidPoints, () => lid.matrixWorld], cup: [cupPoints, () => cup.matrixWorld] };
@@ -132,16 +137,21 @@ export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: () 
   let windowNow: Window | null = null, windowFrom: Window | null = null, windowTo: Window | null = null, insetsTo: Insets | null = null;
   let shift: LidState = { t: 1, v: 0 }; // progress from windowFrom to windowTo when the free area changes (a panel opens or closes)
   let reduced = false, lastSize = { width: 0, height: 0 };
+  let frameDirty = true;
 
+  // The closest framing of the whole turning set (lid wherever it is) plus the cup inside a free area.
+  function fitFor(window: Window) {
+    const p = new THREE.Vector3();
+    for (let i = 0; i < lidPoints.length; i += 3) {
+      p.fromArray(lidPoints, i).applyMatrix4(lid.matrix).toArray(turningPoints, potPoints.length + i);
+    }
+    for (let i = 0; i < cupPoints.length; i += 3) p.fromArray(cupPoints, i).applyMatrix4(cup.matrixWorld).toArray(fixedPoints, i);
+    return fitTurntable(turningPoints, fixedPoints, cameraBasis, window);
+  }
   function frame() {
-    const toCamera = (x: number, y: number, z: number, k: number) => { basis[k] = x * right.x + y * right.y + z * right.z; basis[k + 1] = x * up.x + y * up.y + z * up.z; basis[k + 2] = x * view.x + y * view.y + z * view.z; };
-    const pot = teapot.matrixWorld, p = new THREE.Vector3(), lidWorld = new THREE.Matrix4().multiplyMatrices(teapot.matrixWorld, lid.matrix);
-    let k = 0;
-    for (let i = 0; i < potPoints.length; i += 3, k += 3) { p.fromArray(potPoints, i).applyMatrix4(pot); toCamera(p.x, p.y, p.z, k); }
-    for (let i = 0; i < lidPoints.length; i += 3, k += 3) { p.fromArray(lidPoints, i).applyMatrix4(lidWorld); toCamera(p.x, p.y, p.z, k); }
-    for (let i = 0; i < cupPoints.length; i += 3, k += 3) { p.fromArray(cupPoints, i).applyMatrix4(cup.matrixWorld); toCamera(p.x, p.y, p.z, k); }
-    const w = windowNow!, f = fit(basis, w);
+    const f = fitFor(windowNow!);
     camera.position.copy(right).multiplyScalar(f.x).addScaledVector(up, f.y).addScaledVector(view, f.distance * 1.015); // a hair of air at the binding edge
+    frameDirty = false;
   }
 
   // Springs advance by the time between animation frames (the rAF timestamps), so a slow frame still moves at the
@@ -152,17 +162,19 @@ export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: () 
     frameId = 0;
     const seconds = time === undefined ? 0 : lastFrame ? Math.min(0.1, (time - lastFrame) / 1000) : 1 / 60;
     if (time !== undefined) lastFrame = time;
-    if (!settle(lidState, lidTarget)) lidState = reduced ? { t: lidTarget, v: 0 } : stepLid(lidState, lidTarget, seconds);
-    if (!settle(shift, 1)) shift = reduced ? { t: 1, v: 0 } : stepLid(shift, 1, seconds);
+    if (!settle(lidState, lidTarget)) { lidState = reduced ? { t: lidTarget, v: 0 } : stepLid(lidState, lidTarget, seconds); frameDirty = true; }
+    if (!settle(shift, 1)) { shift = reduced ? { t: 1, v: 0 } : stepLid(shift, 1, seconds); frameDirty = true; }
     if (windowFrom && windowTo) {
       const s = shift.t, mix = (key: keyof Window) => windowFrom![key] + (windowTo![key] - windowFrom![key]) * s;
       windowNow = { left: mix('left'), right: mix('right'), bottom: mix('bottom'), top: mix('top') };
     }
     poseLid(lid.matrix, lidState.t, hinge);
     model.updateMatrixWorld(true);
-    if (windowNow) frame();
-    renderer.render(scene, camera); onRender();
-    if (animating()) request(); else lastFrame = 0;
+    if (windowNow && frameDirty) frame();
+    renderer.render(scene, camera);
+    const moving = animating();
+    onRender(!moving);
+    if (moving) request(); else lastFrame = 0;
   };
   const request = () => { if (!frameId) frameId = requestAnimationFrame(draw); };
 
@@ -225,17 +237,30 @@ export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: () 
       const pot = outline(lidPoints, lid.matrixWorld, outline(bodyPoints, teapot.matrixWorld, empty()));
       return { parts, pot, cup: outline(cupPoints, cup.matrixWorld, empty()) };
     },
-    resize(insets) {
+    resize(candidates) {
       const width = canvas.clientWidth, height = canvas.clientHeight;
       if (!width || !height) return;
       renderer.setSize(width, height, false);
       camera.aspect = width / height; camera.updateProjectionMatrix();
       const tanV = Math.tan((FOV * Math.PI) / 360), tanH = tanV * camera.aspect;
-      const next: Window = { left: -tanH * (1 - (2 * insets.left) / width), right: tanH * (1 - (2 * insets.right) / width), bottom: -tanV * (1 - (2 * insets.bottom) / height), top: tanV * (1 - (2 * insets.top) / height) };
-      cup.position.copy((width - insets.left - insets.right) / (height - insets.top - insets.bottom) < 0.9 ? CUP_AT.tall : CUP_AT.wide);
+      const windowOf = (i: Insets): Window => ({ left: -tanH * (1 - (2 * i.left) / width), right: tanH * (1 - (2 * i.right) / width), bottom: -tanV * (1 - (2 * i.bottom) / height), top: tanV * (1 - (2 * i.top) / height) });
+      const cupFor = (i: Insets) => ((width - i.left - i.right) / (height - i.top - i.bottom) < 0.9 ? CUP_AT.tall : CUP_AT.wide);
+      // Where the type can leave room in more than one way (above and below, or beside), frame each and keep the
+      // arrangement that shows the sculpture largest: the smallest camera distance.
+      const list = Array.isArray(candidates) ? candidates : [candidates];
+      // The choice is made for where the lid is going, not where it is mid-swing: closing a panel must pick exactly
+      // the framing the closed pot had before, whichever way the lid was moving when the panel changed.
+      const distanceFor = (i: Insets) => { cup.position.copy(cupFor(i)); cup.updateMatrixWorld(true); return fitFor(windowOf(i)).distance; };
+      const swing = lid.matrix.clone();
+      poseLid(lid.matrix, lidTarget, hinge);
+      const insets = list.length === 1 ? list[0] : list.map((i) => ({ i, d: distanceFor(i) })).reduce((a, b) => (b.d < a.d ? b : a)).i;
+      lid.matrix.copy(swing);
+      const next = windowOf(insets);
+      cup.position.copy(cupFor(insets));
       // A panel opening or closing glides the set to its new place; a window resize simply re-fits.
       const panelMoved = insetsTo && windowNow && width === lastSize.width && height === lastSize.height && (insets.left !== insetsTo.left || insets.right !== insetsTo.right || insets.top !== insetsTo.top || insets.bottom !== insetsTo.bottom);
       lastSize = { width, height }; insetsTo = insets;
+      frameDirty = true;
       if (panelMoved && !reduced) { windowFrom = windowNow; windowTo = next; shift = { t: 0, v: 0 }; }
       else { windowFrom = windowTo = windowNow = next; shift = { t: 1, v: 0 }; }
       if (frameId) { cancelAnimationFrame(frameId); frameId = 0; }
@@ -244,7 +269,7 @@ export async function createTeapotScene(canvas: HTMLCanvasElement, onRender: () 
     dispose() {
       cancelAnimationFrame(frameId);
       scene.traverse((object) => { if (object instanceof THREE.Mesh) { object.geometry.dispose(); for (const m of [object.material].flat()) m.dispose(); } });
-      scene.environment?.dispose(); pmrem.dispose(); renderer.dispose();
+      disposeArt(); scene.environment?.dispose(); pmrem.dispose(); renderer.dispose();
     },
   };
 }

@@ -27,3 +27,10 @@
 .DS_Store
 /.vscode/
 /.idea/
+
+# Prisma Client is generated from prisma/schema.prisma by `npm install` (postinstall) and `npx prisma generate`
+/src/generated/
+
+# Playwright reports
+/test-results/
+/playwright-report/

@@ -12,9 +12,9 @@ English-speaking visitors to a small, playful tea gathering. They come to look a
 
 ## Product Purpose
 
-The Tea Party is one screen at `/`: an original, abstract 3D cobalt teapot and its cup on a light gallery floor. Three parts of the object do three things:
-- the spout times your tea
-- the pot lets you join today's line (its lid lifts open as you do)
+The Tea Party is one screen at `/`: an original, graffiti-painted 3D cobalt teapot and its cup on a light gallery floor, with loud, raw type around it. Three parts of the object do three things:
+- the spout starts and shows the one tea timer everyone shares
+- the pot lets you join today's shared line (its lid lifts open as you do)
 - the cup shows yesterday's first five
 
 Success means a visitor remembers the teapot, finds all three parts without instructions, and can join or leave the line in seconds.
@@ -26,10 +26,8 @@ The object is the interface. You turn the teapot by scrolling or dragging and ch
 ## Operating Context
 
 - Desktop and phone browsers; mouse wheel, trackpad, touch and keyboard are all first-class.
-- Visitors come back during the day, so a reload must restore their place in line and a running timer.
-- Two modes:
-  - **Preview** (no backend): everything stays in that browser. The artwork never says so; the line panel does.
-  - **Shared line** (Supabase): one line for everyone, archived daily.
+- Visitors come back during the day, so a reload must restore their place in line and the running timer.
+- One mode: everything is shared through the server's PostgreSQL database. Every device sees the same line and the same timer, live. If the database can't be reached, the page says so and disables joining and the timer; there is no private, browser-only fallback.
 
 ## Capabilities and Constraints
 
@@ -37,17 +35,17 @@ The object is the interface. You turn the teapot by scrolling or dragging and ch
 - **Display names:** 2–24 characters, validated in the API and in the database.
 - **The line:**
   - One place per guest per business day, first come first served. Duplicate submits keep a single place.
+  - Anyone can see who is already in today's line before joining; joining still asks only for a name.
   - A guest can remove only their own place.
   - A daily capacity limit and per-address rate limits bound abuse.
 - **The business day:** the calendar date in Europe/Riga (configurable), daylight-saving time included; timestamps are stored in UTC.
 - **Daily archive:**
   - At the end of each day the first five are archived and the line is cleared, transactionally and idempotently.
-  - Connected mode runs this from a database cron job, plus a check on every queue read and write.
-  - The preview archives on the first visit after the day changes.
+  - The server runs this on a five-minute schedule, plus a check on every line read and write.
 - **The first five:** shows yesterday's archive with its date and order. Fewer than five shows only real people; nobody shows an honest empty state. They are never called winners, and nothing implies they were served.
-- **The tea timer:** a saved deadline in the browser. Notification permission is asked only when the visitor requests a notification.
-- **Preview mode:** disclosed once, plainly, where people join: "Preview: your place is saved only on this device." Never shown as a badge in the artwork, and never described as shared or secure.
-- A hosted release can use a browser-only preview or the shared Supabase line; the deployment steps and limits are recorded in `DEPLOY.md`.
+- **The tea timer:** one timer for the whole site, owned by the server, not by whoever started it. Anyone may start it while it is idle or finished, and anyone may stop it. Simultaneous starts: one wins, the rest get the running timer. A Stop only ends the timer it was pressed for. At the deadline everyone sees Ready until it is cleared or the next pot starts. Each device counts down to the server's deadline against its measured clock offset.
+- **Notifications:** optional and local to each device; permission is asked only when the visitor presses the button.
+- Hosting, the database setup and the limits are recorded in `DEPLOY.md`.
 
 ## Brand Commitments
 
@@ -58,24 +56,25 @@ The object is the interface. You turn the teapot by scrolling or dragging and ch
 ## Evidence on Hand
 
 - `public/models/teapot.glb` and its editable source `scripts/build-teapot.mjs`.
-- There are no real members, testimonials or usage figures. The preview starts with an empty line; do not invent any.
+- There are no real members, testimonials or usage figures. The line starts empty; do not invent any.
 
 ## Voice
 
-Warm, plain and brief, like a host at a small table: "There’s always room for one more cup." "Turn the pot. Stay for tea." "Good tea takes a little time." "Pull up a chair. Leave your name in today’s line." "The table is quiet. You could be first." "Your tea is ready." One welcome line and one hint on the artwork; the rest of the voice lives in the panels. Action labels stay literal (Tea timer, Join the line, The first five). No technical or prototype words on screen, no invented people or activity, and nothing that suggests the first five were served. DESIGN.md has the full copy.
+Loud on the artwork, plain in the panels. The artwork talks in short, bold, human phrases: "THE POT’S ON." "WHO’S NEXT?" "A LITTLE CHAOS. A LOT OF TEA." "PULL UP. POUR UP." A small hint keeps it usable: "Spin the pot. Tap the spout, the pot or the cup." Action labels stay literal and instantly understandable: Tea timer, Join the line, The first five. Panels are warm and clear ("Nobody’s here yet. You could be first." "One timer for the whole party." "The pot’s ready."). The shared timer never implies one visitor owns it. No technical words on screen, no invented people or activity, and nothing that suggests the first five were served. DESIGN.md has the full copy.
 
 ## Product Principles
 
-1. The object is the interface; everything else stays small and at the edges.
+1. The object is the interface. The type is loud, but it lives in bands around the sculpture and never covers it, its parts or their callouts.
 2. Nothing moves unless the visitor moves it: no idle animation. The lid opens because the visitor chose the pot; a flicked turn coasts to a stop.
 3. Ask for as little as possible: a name, never an account.
-4. Be honest about the mode, the archive and the timer's limits.
-5. Fit the screen through layout, not clipping: the camera is framed exactly for every turn, so the resting view is large and no turn crops the set. Accessibility wins when they conflict.
+4. Be honest: one shared line and one shared timer, a real archive, and a plain error when the server is away.
+5. Fit the screen through layout, not clipping: the camera has one steady frame that contains a full turn, so the set does not pulse or crop as it moves. Accessibility wins when they conflict.
 
 ## Accessibility & Inclusion
 
 - Every part of the object has an equivalent labelled button, usable by keyboard and screen reader. The turntable turns with the arrow keys and Home.
-- Visible focus, 44px hit areas, and a deliberately fat hit volume on the thin spout. Captions sit on the bare floor beside their parts, never on the glaze.
+- Visible focus, 44px hit areas, and a deliberately fat hit volume on the thin spout. Callouts sit on the bare floor beside their parts, never on the glaze or the artwork's type; they clear while the object turns and return at rest.
+- The big type is real text in reading order (the mark is the page's heading); its tilts are decoration only.
 - Form errors are tied to their fields; joining, leaving and a ready timer are announced.
 - Reduced motion makes turns instant, removes coasting and panel animation, and shows the lid already open.
 - At high zoom or on very short screens the page scrolls rather than hiding controls.

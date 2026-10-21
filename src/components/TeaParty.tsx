@@ -1,10 +1,10 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import TeapotStage from './TeapotStage';
-import { CupPanel, LinePanel, TimerPanel, ordinal, useTeaTimer } from './panels';
+import { CupPanel, LinePanel, TimerPanel, ordinal } from './panels';
+import { useTeaState } from './useTeaState';
 import { formatClock } from '@/lib/timer';
-import { loadLine, type Snapshot } from '@/lib/line-client';
 import type { Part } from '@/lib/teapot-scene';
 
 const TITLES: Record<Part, string> = { spout: 'Tea timer', body: 'Join the line', cup: 'The first five' };
@@ -12,43 +12,44 @@ const TITLES: Record<Part, string> = { spout: 'Tea timer', body: 'Join the line'
 export default function TeaParty() {
   const [open, setOpen] = useState<Part | null>(null);
   const [announcement, setAnnouncement] = useState('');
-  const [place, setPlace] = useState<number | null>(null);
   const trigger = useRef<HTMLElement | null>(null);
   const panel = useRef<HTMLElement>(null);
-  const timer = useTeaTimer();
-
-  // Restore the visitor's place in today's line, so the pot can show it after a reload.
-  useEffect(() => { loadLine().then((s) => setPlace(s.me)).catch(() => {}); }, []);
-  const onLineChange = useCallback((s: Snapshot) => setPlace(s.me), []);
+  // The shared line and timer: the pot's badge and the spout's clock stay current with everyone's changes.
+  const tea = useTeaState(), timer = tea.timer, place = tea.state?.line.me ?? null;
 
   const openPart = (part: Part, from: HTMLElement) => { trigger.current = from; setOpen(part); };
   const close = () => setOpen(null);
   // Focus returns to the part's label after the panel has gone (on phones the labels reappear only then).
   useEffect(() => { if (open === null) trigger.current?.focus(); }, [open]);
-  // Focus moves into the panel: to its first action, or to the panel itself while its content loads.
-  useEffect(() => { if (open && panel.current) (panel.current.querySelector<HTMLElement>('[data-autofocus]') ?? panel.current).focus(); }, [open, timer.state.status, place]);
+  // Focus moves into a panel once, when it opens: to its first action, or to the panel itself while it loads.
+  // Live changes (someone else's timer, your place moving up) never move it; the panels handle your own actions.
+  useEffect(() => { if (open && panel.current) (panel.current.querySelector<HTMLElement>('[data-autofocus]') ?? panel.current).focus(); }, [open]);
 
   const badges = {
-    spout: timer.state.status === 'running' ? formatClock(timer.state.remainingMs) : timer.state.status === 'ready' ? 'Ready' : undefined,
+    spout: timer.status === 'running' ? formatClock(timer.remainingMs) : timer.status === 'ready' ? 'Ready' : undefined,
     body: place ? ordinal(place) : undefined,
   };
 
   return <main className="tea">
     <TeapotStage onOpen={openPart} active={open} badges={badges}/>
-    <header className="corner corner-top-left">
-      <p className="mark">The Tea Party</p>
+    {/* The artwork's voice. Fixed, art-directed placement (the tilt and overlap are set in CSS, never random);
+        the camera and the callouts keep the sculpture clear of every .say block. */}
+    <header className="band band-top">
+      <h1 className="say mark">The Tea Party</h1>
+      <p className="say shout">The pot’s on. <span className="sticker">Who’s next?</span></p>
     </header>
-    <footer className="corner corner-bottom">
-      <p className="statement">There’s always room for one more cup.</p>
-      <p className="hint">Turn the pot. Stay for tea.</p>
+    <footer className="band band-bottom">
+      <p className="say chaos"><span className="thin">A little chaos.</span> <span className="heavy">A lot of tea.</span></p>
+      <p className="say tag">Pull up. Pour up.</p>
+      <p className="say hint">Spin the pot. Tap the spout, the pot or the cup.</p>
     </footer>
     {open && <section ref={panel} className={`panel panel-${open}`} role="dialog" aria-modal="false" aria-label={TITLES[open]} tabIndex={-1} onKeyDown={(event) => { if (event.key === 'Escape') close(); }}>
       <button type="button" className="close" onClick={close} aria-label={`Close ${TITLES[open].toLowerCase()}`}><X size={18} aria-hidden/></button>
-      {open === 'spout' && <TimerPanel timer={timer}/>}
-      {open === 'body' && <LinePanel announce={setAnnouncement} onChange={onLineChange}/>}
-      {open === 'cup' && <CupPanel/>}
+      {open === 'spout' && <TimerPanel tea={tea}/>}
+      {open === 'body' && <LinePanel tea={tea} announce={setAnnouncement}/>}
+      {open === 'cup' && <CupPanel timeZone={tea.state?.timeZone ?? 'Europe/Riga'}/>}
     </section>}
     <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
-    <p className="sr-only" role="status" aria-live="assertive">{timer.state.status === 'ready' ? 'Your tea is ready.' : ''}</p>
+    <p className="sr-only" role="status" aria-live="assertive">{timer.status === 'ready' ? 'The pot’s ready.' : ''}</p>
   </main>;
 }

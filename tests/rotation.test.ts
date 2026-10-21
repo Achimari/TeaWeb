@@ -41,6 +41,14 @@ test('easing follows the input and lands exactly on the target, so motion stops 
   assert.equal(approach(0, 1, 10_000), 1);
 });
 
+test('a large wheel event cannot jump most of a revolution in one frame', () => {
+  const first = approach(0, Math.PI * 2, 16);
+  assert.ok(first > 0 && first < 0.22, `first frame turned ${first.toFixed(3)} radians`);
+  let yaw = first;
+  for (let i = 0; i < 120; i++) yaw = approach(yaw, Math.PI * 2, 16);
+  assert.equal(yaw, Math.PI * 2, 'a long turn still lands exactly');
+});
+
 test('release velocity comes from the last moments of a drag, not its whole length', () => {
   const samples = [{ t: 0, x: 0 }, { t: 400, x: 10 }, { t: 450, x: 60 }, { t: 500, x: 110 }];
   const v = releaseVelocity(samples, 400);

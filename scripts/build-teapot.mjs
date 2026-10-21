@@ -13,7 +13,8 @@ import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
 import { dedup, meshopt, prune, weld } from '@gltf-transform/functions';
 import { MeshoptEncoder } from 'meshoptimizer';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { HANDLE_REACH, KNOB_PROFILE, LID_PROFILE, OPENING_R, RIM_OUTER_R } from '../src/lib/lid.ts';
+import { HANDLE_REACH, KNOB_PROFILE, LID_PROFILE, OPENING_R } from '../src/lib/lid.ts';
+import { BODY_PROFILE } from '../src/lib/body-profile.mjs';
 import { unifiedBody } from './unified-body.mjs';
 
 const TAU = Math.PI * 2;
@@ -84,7 +85,7 @@ const marker = (name, x, y, z) => { const node = new THREE.Object3D(); node.name
 // ---- Teapot: one full, low, rounded body; base at y = 0, spout toward +x, handle toward −x -------------
 const RIM_Y = 1.5;
 const teapot = new THREE.Group(); teapot.name = 'Teapot';
-const BODY = [[0, 0.012], [0.6, 0.012], [0.7, 0.02], [0.75, 0.06], [0.76, 0.1], [0.92, 0.2], [1.13, 0.42], [1.25, 0.7], [1.23, 0.98], [1.09, 1.22], [0.86, 1.39], [0.66, 1.465], [RIM_OUTER_R, 1.49], [0.56, RIM_Y]];
+const BODY = BODY_PROFILE;
 // The outer wall and handle are built together below, after the interior and handle path are defined.
 // The rim turns over into a finished cream interior, down to the tea.
 const TEA_Y = 1.06;

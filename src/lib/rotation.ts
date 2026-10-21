@@ -2,6 +2,7 @@
 const RADIANS_PER_PIXEL = (Math.PI * 2) / 1400; // about two long scrolls turn it all the way round
 const STEP = Math.PI / 12;
 const SETTLE_MS = 70; // time constant of the easing that smooths coarse mouse-wheel notches
+const MAX_EASE_RATE = 0.012; // rad/ms: at most about 11° in a normal frame, even for a large wheel event
 
 export function wheelTurn(deltaY: number, deltaMode: number, pageHeight: number): number {
   const pixels = deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * pageHeight : deltaY;
@@ -16,7 +17,10 @@ export function keyTurn(key: string): number | 'reset' | null {
 }
 // Eases toward the target and lands on it exactly, so nothing drifts once input stops.
 export function approach(current: number, target: number, elapsedMs: number): number {
-  const next = target + (current - target) * Math.exp(-Math.max(0, elapsedMs) / SETTLE_MS);
+  const elapsed = Math.max(0, elapsedMs);
+  const eased = target + (current - target) * Math.exp(-elapsed / SETTLE_MS);
+  const limit = elapsed * MAX_EASE_RATE;
+  const next = Math.max(current - limit, Math.min(current + limit, eased));
   return Math.abs(target - next) < 5e-4 ? target : next;
 }
 

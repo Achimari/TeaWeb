@@ -17,12 +17,19 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    # The store tests (tests/store.test.ts) run against a real PostgreSQL, created fresh for each run.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: tea
+          POSTGRES_PASSWORD: tea
+          POSTGRES_DB: tea
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U tea" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
-      # NEXT_PUBLIC_* values are compiled into the browser bundle, so they are
-      # set here rather than on the droplet. Change the repository variables and
-      # re-run to switch the line mode; DEPLOY.md explains the two modes.
-      NEXT_PUBLIC_TEA_MODE: ${{ vars.TEA_MODE || 'demo' }}
-      NEXT_PUBLIC_BUSINESS_TIMEZONE: ${{ vars.BUSINESS_TIMEZONE || 'Europe/Riga' }}
+      TEST_DATABASE_URL: postgresql://tea:tea@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +38,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
 
+      # npm ci also generates Prisma Client (the postinstall script); no database is needed for that.
       - run: npm ci
 
       # The checks DEPLOY.md prescribes before connecting a host.
