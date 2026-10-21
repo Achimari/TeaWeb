@@ -1,0 +1,66 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# teaweb-deploy replaces the release in place and restarts the container, so two
+# overlapping runs would fight over the same directory.
+concurrency:
+  group: deploy-teaweb
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      # NEXT_PUBLIC_* values are compiled into the browser bundle, so they are
+      # set here rather than on the droplet. Change the repository variables and
+      # re-run to switch the line mode; DEPLOY.md explains the two modes.
+      NEXT_PUBLIC_TEA_MODE: ${{ vars.TEA_MODE || 'demo' }}
+      NEXT_PUBLIC_BUSINESS_TIMEZONE: ${{ vars.BUSINESS_TIMEZONE || 'Europe/Riga' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # The checks DEPLOY.md prescribes before connecting a host.
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm audit --omit=dev --audit-level=high
+
+      # Built here, not on the droplet: it has 961 MiB of RAM and already runs
+      # the NoOr app and Caddy.
+      - run: npm run build
+
+      # `output: 'standalone'` emits the server plus only the dependencies it
+      # traces; static assets and public/ are not copied in and must be added.
+      - name: Assemble the standalone release
+        run: |
+          mkdir -p release/.next
+          cp -R .next/standalone/. release/
+          cp -R .next/static release/.next/static
+          cp -R public release/public
+          test -s release/server.js
+
+      - name: Ship the release to the droplet
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          trap 'rm -f ~/.ssh/deploy_key' EXIT
+          printf '%s\n' '206.81.29.175 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEfBRSq5k2QIWyOX8n81pna3F8D4RIeCrAQL2a9g8J9F' > ~/.ssh/known_hosts
+          # The key is pinned to /usr/local/sbin/teaweb-deploy by a forced
+          # command, which rejects a payload missing server.js, .next/static or
+          # the traced node_modules before replacing the running release.
+          tar -cz -C release . | ssh -i ~/.ssh/deploy_key -o BatchMode=yes root@206.81.29.175
