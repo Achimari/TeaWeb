@@ -59,7 +59,20 @@ jobs:
           cp -R .next/standalone/. release/
           cp -R .next/static release/.next/static
           cp -R public release/public
+          # The receiver runs `prisma migrate deploy` from these, in a throwaway
+          # container: the standalone output has no Prisma CLI (a devDependency).
+          # prisma.config.ts carries the datasource url Prisma 7 no longer allows
+          # in the schema, so Migrate needs it alongside the migrations.
+          cp -R prisma release/prisma
+          cp prisma.config.ts release/prisma.config.ts
           test -s release/server.js
+          test -s release/prisma/schema.prisma
+          test -s release/prisma.config.ts
+          # The server talks to PostgreSQL through the pg driver adapter, so a
+          # missing `pg` only fails on the first database call -- after the
+          # release is already live. Check it here instead.
+          test -d release/node_modules/pg \
+            || { echo "::error::the pg driver was not traced into the standalone output"; exit 1; }
 
       - name: Ship the release to the droplet
         run: |
